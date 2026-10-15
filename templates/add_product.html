@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Add product - MiniMart{% endblock %}
+{% block content %}
+<h1>Add product</h1><form method="post" class="card card-body" style="max-width: 36rem">
+  <label class="form-label">Name</label><input class="form-control mb-3" name="name" value="{{ request.form.get('name', '') }}">
+  <label class="form-label">Description</label><input class="form-control mb-3" name="description" value="{{ request.form.get('description', '') }}">
+  <label class="form-label">Price</label><input class="form-control mb-3" name="price" value="{{ request.form.get('price', '') }}">
+  <button class="btn btn-primary">Add product</button>
+</form>
+{% endblock %}

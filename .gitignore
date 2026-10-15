@@ -1,0 +1,17 @@
+# Real settings and secrets (.env.example stays, it only has placeholders)
+.env
+.env.*
+!.env.example
+
+# Local database (password hashes, user data)
+*.db
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Editors
+.vscode/
+.idea/

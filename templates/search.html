@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Search - MiniMart{% endblock %}
+{% block content %}
+<h1>Search</h1><p>Search results for <strong>{{ term }}</strong></p>
+<div class="row g-3">
+  {% for product in products %}
+  <div class="col-md-6 col-lg-4"><div class="card h-100"><div class="card-body">
+    <h2 class="h5">{{ product['name'] }}</h2><p>{{ product['description'] }}</p>
+    <p class="fw-bold">${{ '%.2f'|format(product['price']) }}</p>
+  </div></div></div>
+  {% else %}<div class="alert alert-warning">No products found.</div>{% endfor %}
+</div>
+{% endblock %}

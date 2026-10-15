@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Cart - MiniMart{% endblock %}
+{% block content %}
+<h1>Cart</h1><ul class="list-group mb-3">
+  {% for product in products %}<li class="list-group-item">{{ product['name'] }} - ${{ '%.2f'|format(product['price']) }}</li>
+  {% else %}<li class="list-group-item">Your cart is empty.</li>{% endfor %}
+</ul><p class="fw-bold">Total: ${{ '%.2f'|format(total) }}</p>
+<a class="btn btn-success" href="{{ url_for('checkout') }}">Checkout</a>
+{% endblock %}

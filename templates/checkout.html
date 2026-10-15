@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Checkout - MiniMart{% endblock %}
+{% block content %}
+<h1>Checkout</h1><p>You are about to order {{ count }} item(s), total ${{ '%.2f'|format(total) }}.</p>
+<form method="post"><button class="btn btn-success">Place order</button></form>
+{% endblock %}

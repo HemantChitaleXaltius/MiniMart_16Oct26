@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Login - MiniMart{% endblock %}
+{% block content %}
+<h1>Login</h1><form method="post" class="card card-body" style="max-width: 28rem">
+  <label class="form-label">Username</label><input class="form-control mb-3" name="username" required>
+  <label class="form-label">Password</label><input class="form-control mb-3" type="password" name="password" required>
+  <button class="btn btn-primary">Log in</button>
+</form>
+{% endblock %}

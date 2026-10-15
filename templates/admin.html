@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Admin - MiniMart{% endblock %}
+{% block content %}
+<h1>Admin</h1><a class="btn btn-primary mb-3" href="{{ url_for('admin_add') }}">Add product</a>
+<ul class="list-group">{% for product in products %}<li class="list-group-item">{{ product['name'] }} - ${{ '%.2f'|format(product['price']) }}</li>{% endfor %}</ul>
+{% endblock %}

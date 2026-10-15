@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Products - MiniMart{% endblock %}
+{% block content %}
+<h1>Products</h1>
+<form class="row g-2 mb-4" action="{{ url_for('search') }}" method="get">
+  <div class="col"><input class="form-control" name="q" placeholder="Search products"></div>
+  <div class="col-auto"><button class="btn btn-dark">Search</button></div>
+</form>
+<div class="row g-3">
+  {% for product in products %}
+  <div class="col-md-6 col-lg-4"><div class="card h-100"><div class="card-body">
+    <h2 class="h5">{{ product['name'] }}</h2><p>{{ product['description'] }}</p>
+    <p class="fw-bold">${{ '%.2f'|format(product['price']) }}</p>
+    <form method="post" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+      <button class="btn btn-primary">Add to cart</button>
+    </form>
+  </div></div></div>
+  {% endfor %}
+</div>
+{% endblock %}

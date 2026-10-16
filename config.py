@@ -12,6 +12,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 PLACEHOLDER_PREFIX = "MINIMART_SECRET_KEY"
+MINIMART_SECRET_KEY="c8e96638f0ae254344b77ffd04dbe8a52a76f0aa206243efd853a3602661caeb"
 MIN_SECRET_KEY_LENGTH = 32
 
 

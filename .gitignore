@@ -6,6 +6,9 @@
 # Local database (password hashes, user data)
 *.db
 
+#folder 
+/logs
+
 # Python
 __pycache__/
 *.pyc

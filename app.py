@@ -7,13 +7,102 @@ The Flask app is built by create_app(), so tests can create their own app with
 their own throwaway database.
 """
 
+import logging
+import os
 import sqlite3
+import time
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
-from flask import Flask, abort, current_app, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, current_app, flash, has_request_context, redirect, render_template, request, session, url_for
+from flask.logging import default_handler
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
+
+LOG_FORMAT = "%(asctime)sZ %(levelname)-8s %(name)s user=%(user)s %(method)s %(path)s | %(message)s"
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+
+def _one_line(text, limit=200):
+    """Escape line breaks and odd characters and cut the length, so text typed by a
+    visitor cannot forge extra log lines."""
+    return str(text).encode("unicode_escape").decode("ascii")[:limit]
+
+
+class RequestContextFilter(logging.Filter):
+    """Adds who/what to every log line: username, HTTP method and URL path.
+
+    Deliberately limited to those three. It never reads the query string, form
+    data, headers, cookies or the session contents, so passwords, hashes and
+    tokens cannot reach the log through this filter.
+    """
+
+    def filter(self, record):
+        if has_request_context():
+            record.user = _one_line(session.get("username", "-"))
+            record.method = _one_line(request.method)
+            record.path = _one_line(request.path)
+        else:
+            record.user = record.method = record.path = "-"
+        return True
+
+
+def configure_logging(app, level=None, log_dir=None):
+    """Send MiniMart's log lines to the console and to logs/minimart.log.
+
+    level   -- DEBUG, INFO, WARNING, ERROR or CRITICAL. If not given, it is read
+               from MINIMART_LOG_LEVEL in the environment (your .env), else INFO.
+               An unrecognised value falls back to INFO and logs a warning.
+    log_dir -- folder for the log file. Default: a "logs" folder next to app.py.
+               While testing (app.testing) no file is written unless you pass this.
+
+    Safe to call more than once: it replaces its own handlers instead of adding more.
+    """
+    requested = str(level or os.environ.get("MINIMART_LOG_LEVEL") or "INFO").strip().upper()
+    level_name = requested if requested in LOG_LEVELS else "INFO"
+
+    logger = app.logger
+    logger.setLevel(getattr(logging, level_name))
+    # Flask adds its own console handler; remove it so lines are not printed twice.
+    logger.removeHandler(default_handler)
+    # Remove the handlers a previous call added (they are marked _minimart).
+    for old in [h for h in logger.handlers if getattr(h, "_minimart", False)]:
+        logger.removeHandler(old)
+        old.close()
+
+    formatter = logging.Formatter(LOG_FORMAT, datefmt="%Y-%m-%dT%H:%M:%S")
+    formatter.converter = time.gmtime  # timestamps in UTC; the trailing Z means UTC
+
+    handlers = [logging.StreamHandler()]  # console (stderr)
+    log_file = None
+    file_problem = None
+    if log_dir is not None or not app.testing:
+        folder = log_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+        try:
+            os.makedirs(folder, exist_ok=True)
+            log_file = os.path.join(folder, "minimart.log")
+            # Rotates at about 1 MB and keeps 5 old files, so the disk cannot fill up.
+            handlers.append(RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=5, encoding="utf-8"))
+        except OSError as error:
+            log_file = None
+            file_problem = f"{folder}: {error.strerror}"
+
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        handler.addFilter(RequestContextFilter())
+        handler._minimart = True
+        logger.addHandler(handler)
+
+    # Avoid duplicate lines if something configures the root logger. Tests keep
+    # propagation on so pytest's caplog can see the messages.
+    logger.propagate = app.testing
+
+    if file_problem:
+        logger.warning("Could not open the log file (%s); logging to the console only", file_problem)
+    if requested != level_name:
+        logger.warning("Unknown MINIMART_LOG_LEVEL %r; using INFO", _one_line(requested, 30))
+    logger.info("Logging configured: level=%s file=%s", level_name, log_file or "none")
 
 
 def get_db():
@@ -104,6 +193,7 @@ def create_app(database=None, test_config=None):
     app.config["DATABASE"] = database or config.DATABASE
     if test_config:
         app.config.update(test_config)
+    configure_logging(app)
 
     @app.route("/")
     def home():

@@ -1,0 +1,50 @@
+# The name shown in the "Actions" tab on GitHub.
+name: CI
+
+# WHEN to run: every push to the main branch, and every pull request aimed at main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # A "job" is one set of steps that runs on one temporary machine.
+  # This one is called "test".
+  test:
+    # WHICH machine: a fresh, empty Ubuntu Linux virtual computer from GitHub.
+    # It is deleted when the job ends.
+    runs-on: ubuntu-latest
+
+    # SETTINGS the app needs. Your config.py will not start without
+    # MINIMART_SECRET_KEY, and the CI machine has no .env file, so we set it here.
+    # These are dummy values for testing only. Never put real secrets in this file,
+    # because anyone who can see your repo can read it.
+    env:
+      MINIMART_SECRET_KEY: ci-only-not-a-real-secret
+      MINIMART_ADMIN_PASSWORD: ci-admin-password
+      MINIMART_SHOPPER_PASSWORD: ci-shopper-password
+
+    steps:
+      # STEP 1: copy your code (the exact commit that was pushed) onto the machine.
+      # Without this the machine is empty.
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      # STEP 2: install Python on the machine.
+      # CHANGE the version below to match yours (run "python --version" on your computer).
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # STEP 3: install the libraries your app and tests need, from requirements.txt.
+      # pytest must be listed in requirements.txt, or the next step cannot run.
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      # STEP 4: run your tests. If any test fails, pytest exits with an error code,
+      # this step turns red, the whole job is marked FAILED, and GitHub shows a red
+      # cross. Nothing here hides failures.
+      - name: Run tests
+        run: pytest

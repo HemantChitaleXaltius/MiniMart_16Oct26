@@ -1,0 +1,38 @@
+name: Tests
+
+# When to run: on every push to main, and on every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    # The temporary machine GitHub gives us: a fresh Ubuntu Linux virtual computer.
+    runs-on: ubuntu-latest
+
+    # Dummy values so config.py can import on the empty CI machine.
+    # These are NOT real secrets. Never put real ones in this file.
+    env:
+      MINIMART_SECRET_KEY: ci-only-not-a-real-secret
+      MINIMART_ADMIN_PASSWORD: ci-admin-password
+      MINIMART_SHOPPER_PASSWORD: ci-shopper-password
+
+    steps:
+      - name: Download the code from this commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run the tests
+        run: pytest

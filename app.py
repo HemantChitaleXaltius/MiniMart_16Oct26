@@ -2,23 +2,22 @@
 
 The secret key, database path, debug mode and first-run passwords are read from
 environment variables by config.py. See .env.example for the setting names.
+
+The Flask app is built by create_app(), so tests can create their own app with
+their own throwaway database.
 """
 
 import sqlite3
 from functools import wraps
 
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 
-app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
-DATABASE = config.DATABASE
-
 
 def get_db():
-    connection = sqlite3.connect(DATABASE)
+    connection = sqlite3.connect(current_app.config["DATABASE"])
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -42,6 +41,7 @@ def login_required(view):
     return wrapped
 
 def init_db():
+    """Create tables and first-run data. Must be called inside an app context."""
     connection = get_db()
     try:
         connection.execute(
@@ -72,7 +72,7 @@ def init_db():
                 )
         connection.commit()
     except sqlite3.Error:
-        app.logger.exception("Database initialisation failed")
+        current_app.logger.exception("Database initialisation failed")
         raise
     finally:
         connection.close()
@@ -87,130 +87,139 @@ def fetch_cart_products():
         placeholders = ",".join("?" for _ in ids)
         return connection.execute(f"SELECT * FROM products WHERE id IN ({placeholders})", ids).fetchall()
     except sqlite3.Error:
-        app.logger.exception("Cart query failed")
+        current_app.logger.exception("Cart query failed")
         return []
     finally:
         connection.close()
 
 
-@app.route("/")
-def home():
-    connection = get_db()
-    products = connection.execute("SELECT * FROM products ORDER BY id").fetchall()
-    connection.close()
-    return render_template("index.html", products=products)
+def create_app(database=None, test_config=None):
+    """Build a fresh MiniMart app.
 
+    database    -- path to the SQLite file; defaults to config.DATABASE.
+    test_config -- optional dict of extra settings, e.g. {"TESTING": True}.
+    """
+    app = Flask(__name__)
+    app.secret_key = config.SECRET_KEY
+    app.config["DATABASE"] = database or config.DATABASE
+    if test_config:
+        app.config.update(test_config)
 
-@app.route("/search")
-def search():
-    term = request.args.get("q", "")
-    connection = get_db()
-    try:
-        products = connection.execute("SELECT * FROM products WHERE name LIKE ?", (f"%{term}%",)).fetchall()
-    except sqlite3.Error:
-        app.logger.exception("Search failed")
-        products = []
-        flash("Search is temporarily unavailable.", "danger")
-    finally:
+    @app.route("/")
+    def home():
+        connection = get_db()
+        products = connection.execute("SELECT * FROM products ORDER BY id").fetchall()
         connection.close()
-    return render_template("search.html", products=products, term=term)
+        return render_template("index.html", products=products)
 
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
+    @app.route("/search")
+    def search():
+        term = request.args.get("q", "")
         connection = get_db()
         try:
-            user = connection.execute(
-                "SELECT username, password_hash, role FROM users WHERE username = ?",
-                (username,),
-            ).fetchone()
+            products = connection.execute("SELECT * FROM products WHERE name LIKE ?", (f"%{term}%",)).fetchall()
         except sqlite3.Error:
-            app.logger.exception("Login query failed")
-            user = None
+            app.logger.exception("Search failed")
+            products = []
+            flash("Search is temporarily unavailable.", "danger")
         finally:
             connection.close()
-        if user and check_password_hash(user["password_hash"], password):
-            session["username"] = user["username"]
-            session["role"] = user["role"]
-            return redirect(url_for("home"))
-        flash("Wrong username or password.", "danger")
-    return render_template("login.html")
+        return render_template("search.html", products=products, term=term)
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("home"))
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "POST":
+            username = request.form.get("username", "")
+            password = request.form.get("password", "")
+            connection = get_db()
+            try:
+                user = connection.execute(
+                    "SELECT username, password_hash, role FROM users WHERE username = ?",
+                    (username,),
+                ).fetchone()
+            except sqlite3.Error:
+                app.logger.exception("Login query failed")
+                user = None
+            finally:
+                connection.close()
+            if user and check_password_hash(user["password_hash"], password):
+                session["username"] = user["username"]
+                session["role"] = user["role"]
+                return redirect(url_for("home"))
+            flash("Wrong username or password.", "danger")
+        return render_template("login.html")
 
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("home"))
 
-@app.post("/cart/add/<int:product_id>")
-def add_to_cart(product_id):
-    ids = session.get("cart", [])
-    ids.append(product_id)
-    session["cart"] = ids
-    return redirect(request.referrer or url_for("home"))
+    @app.post("/cart/add/<int:product_id>")
+    def add_to_cart(product_id):
+        ids = session.get("cart", [])
+        ids.append(product_id)
+        session["cart"] = ids
+        return redirect(request.referrer or url_for("home"))
 
+    @app.route("/cart")
+    def cart():
+        products = fetch_cart_products()
+        return render_template("cart.html", products=products, total=sum(p["price"] for p in products))
 
-@app.route("/cart")
-def cart():
-    products = fetch_cart_products()
-    return render_template("cart.html", products=products, total=sum(p["price"] for p in products))
+    @app.route("/checkout", methods=["GET", "POST"])
+    @login_required
+    def checkout():
+        products = fetch_cart_products()
+        total = sum(p["price"] for p in products)
+        if request.method == "POST":
+            session["cart"] = []
+            return render_template("message.html", title="Order placed", message=f"Thank you. Your order contained {len(products)} item(s).", category="success")
+        return render_template("checkout.html", count=len(products), total=total)
 
-
-@app.route("/checkout", methods=["GET", "POST"])
-@login_required
-def checkout():
-    products = fetch_cart_products()
-    total = sum(p["price"] for p in products)
-    if request.method == "POST":
-        session["cart"] = []
-        return render_template("message.html", title="Order placed", message=f"Thank you. Your order contained {len(products)} item(s).", category="success")
-    return render_template("checkout.html", count=len(products), total=total)
-
-
-@app.route("/admin")
-@admin_required
-def admin():
-    connection = get_db()
-    products = connection.execute("SELECT * FROM products ORDER BY id").fetchall()
-    connection.close()
-    return render_template("admin.html", products=products)
-
-
-@app.route("/admin/add", methods=["GET", "POST"])
-@admin_required
-def admin_add():
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        description = request.form.get("description", "").strip()
-        raw_price = request.form.get("price", "")
-        try:
-            price = float(raw_price)
-        except ValueError:
-            flash("Price must be a number.", "danger")
-            return render_template("add_product.html"), 400
-        if not name:
-            flash("Product name is required.", "danger")
-            return render_template("add_product.html"), 400
-        if price < 0:
-            flash("Price cannot be negative.", "danger")
-            return render_template("add_product.html"), 400
+    @app.route("/admin")
+    @admin_required
+    def admin():
         connection = get_db()
-        try:
-            connection.execute("INSERT INTO products (name, description, price) VALUES (?, ?, ?)", (name, description, price))
-            connection.commit()
-        except sqlite3.Error:
-            app.logger.exception("Adding product failed")
-            flash("The product could not be saved.", "danger")
-            return render_template("add_product.html"), 500
-        finally:
-            connection.close()
-        return redirect(url_for("admin"))
-    return render_template("add_product.html")
+        products = connection.execute("SELECT * FROM products ORDER BY id").fetchall()
+        connection.close()
+        return render_template("admin.html", products=products)
+
+    @app.route("/admin/add", methods=["GET", "POST"])
+    @admin_required
+    def admin_add():
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            description = request.form.get("description", "").strip()
+            raw_price = request.form.get("price", "")
+            try:
+                price = float(raw_price)
+            except ValueError:
+                flash("Price must be a number.", "danger")
+                return render_template("add_product.html"), 400
+            if not name:
+                flash("Product name is required.", "danger")
+                return render_template("add_product.html"), 400
+            if price < 0:
+                flash("Price cannot be negative.", "danger")
+                return render_template("add_product.html"), 400
+            connection = get_db()
+            try:
+                connection.execute("INSERT INTO products (name, description, price) VALUES (?, ?, ?)", (name, description, price))
+                connection.commit()
+            except sqlite3.Error:
+                app.logger.exception("Adding product failed")
+                flash("The product could not be saved.", "danger")
+                return render_template("add_product.html"), 500
+            finally:
+                connection.close()
+            return redirect(url_for("admin"))
+        return render_template("add_product.html")
+
+    return app
 
 
 if __name__ == "__main__":
-    init_db()
+    app = create_app()
+    with app.app_context():
+        init_db()
     app.run(debug=config.DEBUG)

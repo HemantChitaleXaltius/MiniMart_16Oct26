@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-PLACEHOLDER_PREFIX = "replace-with"
+PLACEHOLDER_PREFIX = "MINIMART_SECRET_KEY"
 MIN_SECRET_KEY_LENGTH = 32
 
 
